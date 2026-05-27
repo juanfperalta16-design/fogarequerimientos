@@ -1,0 +1,2136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FOGA Equifrigo — Requerimientos de Materia Prima</title>
+
+<!-- PDF / Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Firebase v9 compat (funciona igual que v8, sin cambiar nada de la lógica) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+:root {
+  --prim:       #1a1a1a;
+  --prim-medio: #2d2d2d;
+  --acento:     #e8420a;
+  --acento-osc: #b83208;
+  --acento-cla: #fde8e1;
+  --fondo-app:  #f0eeec;
+  --fondo-card: #ffffff;
+  --fondo-row:  #faf8f7;
+  --borde:      #c4bcb8;
+  --borde-cla:  #e2dbd8;
+  --texto:      #1a1a1a;
+  --enc-tabla:  #d6d0cc;
+  --verde:      #1a8a4a;
+  --rojo:       #c0392b;
+  --naranja:    #e67e22;
+  --sombra:     0 2px 10px rgba(0,0,0,0.12);
+  --radio:      5px;
+  --fuente-h:   Georgia, serif;
+  --fuente:     'Trebuchet MS','Segoe UI',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--fuente);background:var(--fondo-app);color:var(--texto);min-height:100vh;font-size:14px;}
+#app{display:flex;flex-direction:column;min-height:100vh;}
+
+/* ── TOPBAR ── */
+#topbar{background:var(--prim);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 22px;position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,0.4);}
+#topbar .brand h1{font-family:var(--fuente-h);font-size:17px;letter-spacing:.5px;color:#f0c4b0;}
+#topbar .brand .sub{font-size:10px;color:var(--acento);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;font-weight:700;}
+#topbar .top-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+
+/* ── ESTADO CONEXIÓN ── */
+#badge-conexion{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;background:#333;color:#aaa;transition:all .3s;}
+#badge-conexion.online{background:#1a5a2a;color:#7ef0a0;}
+#badge-conexion.offline{background:#5a1a1a;color:#f08080;}
+#badge-conexion.sync{background:#3a3a00;color:#f0e060;animation:parpadeo .8s infinite;}
+@keyframes parpadeo{0%,100%{opacity:1;}50%{opacity:.4;}}
+#badge-conexion .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+
+/* ── BANNER ── */
+#alerta-banner{background:#fff8e1;border-bottom:2px solid var(--naranja);padding:7px 22px;font-size:11.5px;color:#6b4500;display:flex;align-items:center;gap:8px;}
+#alerta-banner span{flex:1;}
+
+/* ── NAVBAR ── */
+#navbar{background:var(--prim-medio);display:flex;gap:2px;padding:0 14px;overflow-x:auto;}
+.nav-tab{background:transparent;border:none;color:#bbb;padding:10px 16px;cursor:pointer;font-family:var(--fuente);font-size:12.5px;font-weight:600;border-bottom:3px solid transparent;white-space:nowrap;transition:all .18s;}
+.nav-tab:hover{color:#fff;background:rgba(255,255,255,.07);}
+.nav-tab.active{color:#fff;border-bottom-color:var(--acento);background:rgba(232,66,10,.12);}
+
+/* ── CONTENIDO ── */
+#contenido-principal{flex:1;padding:18px 22px;max-width:1320px;margin:0 auto;width:100%;}
+.seccion{display:none;}.seccion.activa{display:block;}
+
+/* ── PANTALLA DE CONFIGURACIÓN FIREBASE ── */
+#pantalla-config-firebase{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;display:flex;align-items:center;justify-content:center;}
+#pantalla-config-firebase .fb-box{background:#fff;border-radius:8px;padding:28px 32px;max-width:520px;width:95%;box-shadow:0 8px 40px rgba(0,0,0,.35);}
+#pantalla-config-firebase h2{font-family:var(--fuente-h);color:var(--prim);margin-bottom:6px;font-size:18px;}
+#pantalla-config-firebase .desc{font-size:12.5px;color:#555;margin-bottom:18px;line-height:1.6;}
+#pantalla-config-firebase .pasos{background:#f8f4f0;border-left:4px solid var(--acento);padding:10px 14px;border-radius:0 4px 4px 0;font-size:11.5px;color:#333;margin-bottom:18px;line-height:1.8;}
+#pantalla-config-firebase .pasos a{color:var(--acento);font-weight:700;}
+.fb-form-group{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+.fb-form-group label{font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--prim);letter-spacing:.5px;}
+.fb-form-group input{padding:8px 10px;border:1.5px solid var(--borde);border-radius:4px;font-size:12.5px;font-family:var(--fuente);}
+.fb-form-group input:focus{outline:none;border-color:var(--acento);}
+#pantalla-config-firebase .fb-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px;}
+.fb-error{font-size:11px;color:var(--rojo);margin-top:4px;display:none;}
+
+/* ── BARRA MENSUAL ── */
+.barra-mensual{display:flex;align-items:center;gap:10px;background:var(--fondo-card);padding:11px 14px;border-radius:var(--radio);box-shadow:var(--sombra);margin-bottom:14px;flex-wrap:wrap;border-left:4px solid var(--acento);}
+.barra-mensual select{padding:6px 9px;border:1.5px solid var(--borde);border-radius:4px;font-size:12.5px;background:var(--fondo-row);}
+.meses-botones{display:flex;gap:3px;flex-wrap:wrap;}
+.btn-mes{padding:5px 9px;border:1.5px solid var(--borde);border-radius:4px;background:var(--fondo-row);cursor:pointer;font-size:11.5px;font-weight:600;color:var(--prim);transition:all .15s;}
+.btn-mes:hover{background:var(--acento-cla);border-color:var(--acento);}
+.btn-mes.activo{background:var(--acento);color:#fff;border-color:var(--acento-osc);}
+
+/* ── TABLAS ── */
+.tabla-wrapper{background:var(--fondo-card);border-radius:var(--radio);box-shadow:var(--sombra);overflow:auto;}
+.tabla-registro{width:100%;border-collapse:collapse;font-size:12px;}
+.tabla-registro th{background:var(--enc-tabla);color:var(--prim);padding:9px 10px;text-align:left;font-weight:700;border:1px solid var(--borde);white-space:nowrap;}
+.tabla-registro td{padding:7px 10px;border:1px solid var(--borde-cla);vertical-align:middle;}
+.tabla-registro tr:nth-child(even) td{background:var(--fondo-row);}
+.tabla-registro tr:hover td{background:var(--acento-cla);}
+.acciones-fila{display:flex;gap:4px;}
+
+/* ── BOTONES ── */
+.btn{padding:8px 15px;border:none;border-radius:4px;cursor:pointer;font-family:var(--fuente);font-size:12.5px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:5px;}
+.btn:hover{filter:brightness(1.1);transform:translateY(-1px);}
+.btn:active{transform:translateY(0);filter:brightness(.93);}
+.btn-primario{background:var(--acento);color:#fff;}
+.btn-exito{background:var(--verde);color:#fff;}
+.btn-peligro{background:var(--rojo);color:#fff;}
+.btn-alerta{background:var(--naranja);color:#fff;}
+.btn-gris{background:var(--enc-tabla);color:var(--prim);}
+.btn-negro{background:var(--prim);color:#fff;}
+.btn-sm{padding:5px 10px;font-size:11px;}
+.btn-xs{padding:3px 7px;font-size:10px;border-radius:3px;}
+
+/* ── FORMULARIO ── */
+.form-card{background:var(--fondo-card);border-radius:var(--radio);box-shadow:var(--sombra);padding:18px;margin-bottom:18px;}
+.form-card h3{color:var(--prim);font-size:14px;margin-bottom:13px;padding-bottom:7px;border-bottom:2px solid var(--acento-cla);font-family:var(--fuente-h);}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:13px;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-group.span2{grid-column:span 2;}
+label{font-size:10.5px;font-weight:700;color:var(--prim);text-transform:uppercase;letter-spacing:.5px;}
+input[type=text],input[type=date],input[type=number],select,textarea{padding:7px 9px;border:1.5px solid var(--borde);border-radius:4px;font-family:var(--fuente);font-size:12.5px;background:var(--fondo-row);color:var(--texto);transition:border-color .14s;width:100%;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acento);background:#fff;box-shadow:0 0 0 3px rgba(232,66,10,.12);}
+input.error,select.error{border-color:var(--rojo);background:#fdf0f0;}
+textarea{resize:vertical;min-height:60px;}
+.error-msg{font-size:10px;color:var(--rojo);font-weight:600;min-height:12px;}
+
+/* ── BUSCADOR MATERIALES ── */
+.buscador-mat-wrap{position:relative;}
+#buscador-material-input{background:#fff;border:1.5px solid var(--acento);}
+.dropdown-materiales{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--acento);border-top:none;border-radius:0 0 4px 4px;max-height:210px;overflow-y:auto;z-index:500;box-shadow:0 4px 14px rgba(0,0,0,.16);display:none;}
+.dropdown-materiales.visible{display:block;}
+.dropdown-item{padding:8px 10px;cursor:pointer;font-size:11.5px;border-bottom:1px solid #eee;}
+.dropdown-item:hover{background:var(--acento-cla);}
+.dropdown-item strong{color:var(--acento);}
+
+/* ── MATERIALES FORMULARIO ── */
+.materiales-lista{margin-top:8px;}
+.material-item{display:grid;grid-template-columns:2fr 95px 100px 1fr 32px;gap:7px;align-items:center;background:var(--acento-cla);border:1px solid #f0c4b0;border-radius:4px;padding:7px 9px;margin-bottom:5px;}
+.material-item-cod{font-size:11px;font-weight:700;color:var(--acento-osc);}
+.material-item-desc{font-size:11px;}
+.material-item input{padding:3px 6px;font-size:11.5px;background:#fff;}
+.btn-eliminar-mat{background:var(--rojo);color:#fff;border:none;border-radius:3px;padding:4px 7px;cursor:pointer;font-size:15px;line-height:1;}
+.btn-eliminar-mat:hover{background:#922b21;}
+
+/* ── IMAGEN ── */
+.img-preview{max-width:100%;max-height:200px;border:2px dashed var(--borde);border-radius:4px;display:none;margin-top:8px;object-fit:contain;}
+
+/* ── FICHA TÉCNICA ── */
+/* ── FICHA — proporciones A4 (210×297mm ≈ ratio 1:1.414) ── */
+#ficha-container{background:var(--fondo-card);border-radius:var(--radio);box-shadow:var(--sombra);padding:18px;}
+
+/* Wrapper que fuerza ratio A4 en pantalla */
+#ficha-a4-wrapper{
+  width:100%;
+  max-width:794px;   /* 210mm @ 96dpi */
+  margin:0 auto;
+  aspect-ratio:210/297;
+  position:relative;
+}
+#ficha-tecnica{
+  background:#eaf4fb;
+  border:3px solid #1a1a1a;
+  font-family:Arial,sans-serif;
+  font-size:11px;
+  width:100%;
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+.ficha-header{display:grid;grid-template-columns:140px 1fr 140px;align-items:stretch;background:#fff;border-bottom:2px solid #1a1a1a;flex-shrink:0;}
+.ficha-logo-cel{display:flex;align-items:center;justify-content:center;padding:6px;border-right:1px solid #1a1a1a;}
+.ficha-logo-cel.derecho{border-right:none;border-left:1px solid #1a1a1a;}
+.ficha-logo-cel img{max-width:120px;max-height:46px;object-fit:contain;}
+.ficha-logo-txt{font-size:12px;font-weight:800;color:#1a1a1a;text-align:center;line-height:1.3;}
+.ficha-titulo-cel{text-align:center;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.ficha-titulo-cel h2{font-size:13px;font-weight:800;color:#1a1a1a;letter-spacing:.8px;text-transform:uppercase;}
+.ficha-titulo-cel .ficha-sub{font-size:9.5px;color:#666;margin-top:2px;}
+
+.ficha-datos{display:grid;grid-template-columns:repeat(2,1fr);border-bottom:2px solid #1a1a1a;flex-shrink:0;}
+.ficha-dato-fila{display:flex;border-bottom:1px solid #b0c4d4;border-right:1px solid #b0c4d4;}
+.ficha-dato-fila:nth-child(2n){border-right:none;}
+.ficha-dato-lbl{background:#c8d4dc;padding:4px 7px;font-weight:700;font-size:9px;text-transform:uppercase;color:#1a1a1a;min-width:105px;display:flex;align-items:center;border-right:1px solid #9ab0c8;flex-shrink:0;}
+.ficha-dato-val{padding:4px 8px;background:#fff;display:flex;align-items:center;flex:1;font-size:10px;font-weight:600;word-break:break-word;}
+
+.ficha-tabla-materiales{width:100%;border-collapse:collapse;border-bottom:2px solid #1a1a1a;flex-shrink:0;}
+.ficha-tabla-materiales th{background:#c8d4dc;padding:5px 7px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;border:1px solid #9ab0c8;color:#1a1a1a;}
+.ficha-tabla-materiales td{padding:4px 7px;border:1px solid #b0c4d4;background:#fff;font-size:10px;text-align:center;word-break:break-word;}
+.ficha-tabla-materiales td.td-mat{text-align:left;}
+.ficha-tabla-materiales tr:nth-child(even) td{background:#eaf4fb;}
+
+.ficha-tabla-resp{width:100%;border-collapse:collapse;border-bottom:2px solid #1a1a1a;flex-shrink:0;}
+.ficha-tabla-resp th{background:#c8d4dc;padding:4px 7px;text-align:center;font-size:9px;font-weight:700;border:1px solid #9ab0c8;color:#1a1a1a;}
+.ficha-tabla-resp td{padding:4px 7px;border:1px solid #b0c4d4;background:#fff;font-size:10px;text-align:center;}
+.td-firma{height:34px;}
+
+.ficha-seccion-titulo{background:#1a1a1a;color:#fff;padding:3px 9px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;flex-shrink:0;}
+
+/* ESQUEMA — ocupa todo el espacio restante del A4 */
+.ficha-esquema{
+  background:#fff;
+  flex:1;          /* ← CRECE para llenar el resto de la hoja */
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  border-bottom:2px solid #1a1a1a;
+  padding:8px;
+  position:relative;
+  cursor:pointer;
+  outline:none;
+}
+.ficha-esquema:focus{ box-shadow:0 0 0 3px rgba(232,66,10,.35) inset; }
+.ficha-esquema img{max-width:100%;max-height:100%;object-fit:contain;}
+/* zona de paste — visible cuando NO hay imagen */
+.paste-hint{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:8px;
+  color:#ccc;
+  pointer-events:none;
+  user-select:none;
+}
+.paste-hint .paste-icon{font-size:36px;}
+.paste-hint p{font-size:11px;text-align:center;line-height:1.5;}
+.paste-hint kbd{background:#eee;border:1px solid #bbb;border-radius:3px;padding:1px 5px;font-size:10px;color:#555;}
+/* botón quitar imagen dentro del esquema */
+.btn-quitar-esquema{
+  position:absolute;top:6px;right:6px;
+  background:var(--rojo);color:#fff;border:none;
+  border-radius:3px;padding:3px 8px;font-size:10px;
+  cursor:pointer;display:none;z-index:10;
+}
+.ficha-esquema:hover .btn-quitar-esquema{display:block;}
+
+.ficha-obs{background:#fff;flex-shrink:0;min-height:48px;padding:7px 10px;font-size:10px;}
+
+/* ── CONFIGURACIÓN ── */
+.config-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px;}
+.config-card{background:var(--fondo-card);border-radius:var(--radio);box-shadow:var(--sombra);padding:15px;}
+.config-card h4{color:var(--prim);font-size:12px;margin-bottom:9px;padding-bottom:6px;border-bottom:2px solid var(--acento);text-transform:uppercase;letter-spacing:.5px;}
+.lista-config-item{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--borde-cla);}
+.lista-config-item span{flex:1;font-size:12px;}
+.config-input-row{display:flex;gap:6px;margin-top:8px;}
+.config-input-row input{flex:1;}
+
+/* ── CATÁLOGO ── */
+.catalogo-search{display:flex;gap:8px;margin-bottom:13px;align-items:center;flex-wrap:wrap;}
+.catalogo-search input{flex:1;min-width:180px;}
+.tabla-catalogo{width:100%;border-collapse:collapse;font-size:12px;}
+.tabla-catalogo th{background:var(--enc-tabla);padding:8px 10px;text-align:left;border:1px solid var(--borde);font-weight:700;color:var(--prim);}
+.tabla-catalogo td{padding:7px 10px;border:1px solid var(--borde-cla);}
+.tabla-catalogo tr:nth-child(even) td{background:var(--fondo-row);}
+.tabla-catalogo tr:hover td{background:var(--acento-cla);}
+
+/* ── MODALES ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;align-items:center;justify-content:center;display:none;}
+.modal-overlay.visible{display:flex;}
+.modal-box{background:#fff;border-radius:7px;padding:22px;max-width:460px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.28);}
+.modal-box h3{color:var(--prim);margin-bottom:11px;font-size:15px;}
+.modal-box p{margin-bottom:15px;font-size:12.5px;color:#444;line-height:1.5;}
+.modal-acciones{display:flex;gap:9px;justify-content:flex-end;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:22px;right:22px;background:var(--prim);color:#fff;padding:11px 18px;border-radius:5px;font-size:12.5px;box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:all .28s;z-index:3000;max-width:340px;}
+#toast.visible{opacity:1;transform:translateY(0);}
+#toast.exito{background:var(--verde);}
+#toast.error{background:var(--rojo);}
+
+/* ── MISCELÁNEOS ── */
+.estado-vacio{text-align:center;padding:38px 16px;color:var(--borde);}
+.estado-vacio .icono{font-size:38px;margin-bottom:9px;}
+.badge{display:inline-block;padding:2px 8px;border-radius:11px;font-size:10px;font-weight:700;background:var(--enc-tabla);color:var(--prim);}
+.badge-stock{background:#d4edda;color:#155724;}
+.badge-adicional{background:#d1ecf1;color:#0c5460;}
+.badge-reproceso{background:#fff3cd;color:#856404;}
+.badge-garantia{background:#f8d7da;color:#721c24;}
+.badge-cambio{background:#e2d9f3;color:#4a2c82;}
+.badge-otro{background:#e0e0e0;color:#333;}
+.logo-preview-box{border:2px dashed var(--borde);border-radius:4px;padding:10px;text-align:center;min-height:68px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;}
+.logo-preview-box img{max-height:52px;max-width:130px;object-fit:contain;}
+.titulo-seccion{font-family:var(--fuente-h);font-size:17px;color:var(--prim);margin-bottom:15px;padding-bottom:7px;border-bottom:3px solid var(--acento);display:flex;align-items:center;gap:9px;}
+.info-box{background:var(--acento-cla);border-left:4px solid var(--acento);padding:9px 13px;border-radius:0 4px 4px 0;font-size:11.5px;color:var(--acento-osc);margin-bottom:13px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════════════════════
+     PANTALLA CONFIGURAR FIREBASE
+     Se muestra solo la primera vez
+════════════════════════════════════════════ -->
+<div id="pantalla-config-firebase">
+  <div class="fb-box">
+    <h2>🔥 Conectar con Firebase</h2>
+    <p class="desc">
+      Esta app usa <strong>Google Firebase</strong> para sincronizar los datos entre todas
+      las computadoras de la fábrica en tiempo real.<br>
+      Solo necesitas hacerlo <strong>una vez por equipo</strong>.
+      La configuración se guarda localmente.
+    </p>
+    <div class="pasos">
+      <strong>Cómo obtener los datos:</strong><br>
+      1. Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a><br>
+      2. Crea un proyecto (ej: <em>foga-equifrigo</em>)<br>
+      3. Agrega una app Web (&lt;/&gt;)<br>
+      4. En <strong>Firestore Database</strong> → crea la base en modo producción<br>
+      5. En <strong>Configuración del proyecto</strong> → copia los valores de abajo<br>
+      6. En Firestore → <strong>Reglas</strong> → pega:<br>
+      <code style="font-size:10px;background:#fff;padding:2px 5px;border-radius:3px;">
+        allow read, write: if true;
+      </code>
+    </div>
+
+    <div class="fb-form-group">
+      <label>API Key</label>
+      <input type="text" id="fb-apiKey" placeholder="AIzaSy...">
+    </div>
+    <div class="fb-form-group">
+      <label>Auth Domain</label>
+      <input type="text" id="fb-authDomain" placeholder="mi-proyecto.firebaseapp.com">
+    </div>
+    <div class="fb-form-group">
+      <label>Project ID</label>
+      <input type="text" id="fb-projectId" placeholder="mi-proyecto">
+    </div>
+    <div class="fb-form-group">
+      <label>App ID</label>
+      <input type="text" id="fb-appId" placeholder="1:123456789:web:abc...">
+    </div>
+    <div id="fb-error-msg" class="fb-error">⚠️ Verifica los datos e intenta de nuevo.</div>
+    <div class="fb-actions">
+      <button class="btn btn-gris" onclick="usarSoloLocal()">Usar solo en este equipo (localStorage)</button>
+      <button class="btn btn-primario" id="btn-conectar-firebase" onclick="conectarFirebase()">
+        🔥 Conectar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ TOPBAR ════════════════════════════════════════ -->
+<div id="topbar">
+  <div class="brand">
+    <div>
+      <h1>FOGA EQUIFRIGO</h1>
+      <div class="sub">Departamento de Diseño</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <div id="badge-conexion"><span class="dot"></span> Conectando...</div>
+    <button class="btn btn-alerta btn-sm" onclick="exportarRespaldoJSON()">💾 Respaldo JSON</button>
+    <button class="btn btn-gris btn-sm" onclick="triggerImportarJSON()">📂 Importar</button>
+    <input type="file" id="input-importar-json" accept=".json" style="display:none" onchange="importarRespaldoJSON(event)">
+  </div>
+</div>
+
+<!-- BANNER -->
+<div id="alerta-banner">
+  <span id="texto-banner">⚠️ Cargando datos...</span>
+</div>
+
+<!-- NAVBAR -->
+<div id="navbar">
+  <button class="nav-tab active" data-sec="registro" onclick="cambiarSeccion('registro')">📋 Registro Mensual</button>
+  <button class="nav-tab" data-sec="nuevo"    onclick="cambiarSeccion('nuevo')">➕ Nuevo Requerimiento</button>
+  <button class="nav-tab" data-sec="ficha"    onclick="cambiarSeccion('ficha')">📄 Ver Ficha</button>
+  <button class="nav-tab" data-sec="catalogo" onclick="cambiarSeccion('catalogo')">🗂️ Catálogo</button>
+  <button class="nav-tab" data-sec="config"   onclick="cambiarSeccion('config')">⚙️ Configuración</button>
+</div>
+
+<!-- ══════════════════════════════════════════ CONTENIDO ════════════════════════════════════════ -->
+<div id="contenido-principal">
+
+  <!-- ── REGISTRO MENSUAL ── -->
+  <div id="sec-registro" class="seccion activa">
+    <div class="barra-mensual">
+      <strong>Año:</strong>
+      <select id="sel-anio" onchange="onAnioChange()"></select>
+      <strong>Mes:</strong>
+      <div class="meses-botones" id="meses-botones"></div>
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn btn-negro btn-sm" onclick="exportarRegistroMensual()">📊 Excel</button>
+        <button class="btn btn-primario btn-sm" onclick="crearNuevoRequerimiento()">➕ Nuevo</button>
+      </div>
+    </div>
+    <div class="tabla-wrapper">
+      <table class="tabla-registro">
+        <thead>
+          <tr>
+            <th>#</th><th>Fecha</th><th>PEC</th><th>Cliente</th>
+            <th>Solicitado por</th><th>Motivo</th><th>Diseñador</th>
+            <th>Componente</th><th>Materiales</th><th>Link</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-registro"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── FORMULARIO ── -->
+  <div id="sec-nuevo" class="seccion">
+    <h2 class="titulo-seccion" id="titulo-formulario">➕ Nuevo Requerimiento</h2>
+
+    <div class="form-card">
+      <h3>📋 Datos Generales</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha *</label>
+          <input type="date" id="f-fecha">
+          <span class="error-msg" id="err-fecha"></span>
+        </div>
+        <div class="form-group">
+          <label>Solicitado por / Maestro *</label>
+          <select id="f-solicitado"><option value="">-- Seleccionar --</option></select>
+          <span class="error-msg" id="err-solicitado"></span>
+        </div>
+        <div class="form-group">
+          <label>Cliente *</label>
+          <input type="text" id="f-cliente" placeholder="Nombre del cliente o STOCK">
+          <span class="error-msg" id="err-cliente"></span>
+        </div>
+        <div class="form-group">
+          <label>N. Orden / PEC * (manual)</label>
+          <input type="text" id="f-pec" placeholder="Ej: PEC-279">
+          <span class="error-msg" id="err-pec"></span>
+        </div>
+        <div class="form-group">
+          <label>Motivo *</label>
+          <select id="f-motivo"><option value="">-- Seleccionar --</option></select>
+          <span class="error-msg" id="err-motivo"></span>
+        </div>
+        <div class="form-group">
+          <label>Diseñador *</label>
+          <select id="f-disenador"><option value="">-- Seleccionar --</option></select>
+          <span class="error-msg" id="err-disenador"></span>
+        </div>
+        <div class="form-group span2">
+          <label>Componente</label>
+          <input type="text" id="f-componente" placeholder="Ej: Línea caliente">
+        </div>
+        <div class="form-group span3">
+          <label>🔗 Link / URL de referencia *</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="f-link" placeholder="https://... o N/A si no aplica" style="flex:1;">
+            <button type="button" class="btn btn-gris btn-sm" onclick="document.getElementById('f-link').value='N/A';document.getElementById('f-link').classList.remove('error');document.getElementById('err-link').textContent='';" title="Sin link">Sin link (N/A)</button>
+          </div>
+          <span class="error-msg" id="err-link"></span>
+          <span style="font-size:10px;color:#888;margin-top:2px;">Escribe la URL o haz clic en "Sin link" si no aplica.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <h3>🔩 Materiales</h3>
+      <div class="info-box">Busca por código o descripción parcial. Agrega cuantos materiales necesites.</div>
+      <div style="display:grid;grid-template-columns:1fr 95px 105px 1fr auto;gap:10px;align-items:end;margin-bottom:8px;">
+        <div class="form-group">
+          <label>Buscar Material</label>
+          <div class="buscador-mat-wrap">
+            <input type="text" id="buscador-material-input" placeholder="Código o descripción..." autocomplete="off"
+              oninput="buscarMateriales(this.value)" onfocus="buscarMateriales(this.value)">
+            <div class="dropdown-materiales" id="dropdown-materiales"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Cantidad</label>
+          <input type="text" id="mat-cantidad" placeholder="0,3">
+        </div>
+        <div class="form-group">
+          <label>Unidad</label>
+          <input type="text" id="mat-unidad" placeholder="% / m / kg">
+        </div>
+        <div class="form-group">
+          <label>Para qué es (Observación)</label>
+          <input type="text" id="mat-requerimiento" placeholder="Ej: CONO RECOGE GRASA">
+        </div>
+        <div class="form-group" style="justify-content:flex-end;">
+          <label>&nbsp;</label>
+          <button class="btn btn-primario" onclick="agregarMaterialAlFormulario()">+ Agregar</button>
+        </div>
+      </div>
+      <div id="material-seleccionado-info" style="font-size:11px;color:var(--acento-osc);margin-bottom:5px;font-weight:600;min-height:14px;"></div>
+      <div class="error-msg" id="span-err-materiales" style="margin-bottom:6px;"></div>
+      <div class="materiales-lista" id="materiales-lista"></div>
+    </div>
+
+    <div class="form-card">
+      <h3>🖼️ Esquema e Imagen</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Esquema o imagen (opcional)</label>
+          <input type="file" id="f-imagen" accept="image/*" onchange="previewImagen(event)">
+          <img id="preview-imagen" class="img-preview" alt="Vista previa">
+          <button class="btn btn-gris btn-xs" style="margin-top:5px;width:fit-content;" onclick="limpiarImagen()">✕ Quitar</button>
+        </div>
+        <div class="form-group span2">
+          <label>Observación general</label>
+          <textarea id="f-observacion" placeholder="Observaciones adicionales..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:32px;">
+      <button class="btn btn-exito" id="btn-guardar-req" onclick="guardarRequerimiento()">💾 Guardar Requerimiento</button>
+      <button class="btn btn-gris" onclick="limpiarFormulario()">🗑️ Limpiar</button>
+      <button class="btn btn-negro" onclick="cambiarSeccion('registro')">← Volver</button>
+    </div>
+  </div>
+
+  <!-- ── FICHA TÉCNICA ── -->
+  <div id="sec-ficha" class="seccion">
+    <h2 class="titulo-seccion">📄 Ficha Técnica</h2>
+    <div id="ficha-container">
+      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:15px;">
+        <button class="btn btn-primario" onclick="exportarPDF()">🖨️ Exportar PDF</button>
+        <button class="btn btn-negro" onclick="cambiarSeccion('registro')">← Volver</button>
+      </div>
+      <div id="ficha-a4-wrapper">
+        <div id="ficha-tecnica">
+          <div style="text-align:center;padding:48px 20px;color:#bbb;font-style:italic;flex:1;display:flex;align-items:center;justify-content:center;">
+            Selecciona un requerimiento del Registro Mensual (ícono 📄) para ver su ficha.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CATÁLOGO ── -->
+  <div id="sec-catalogo" class="seccion">
+    <h2 class="titulo-seccion">🗂️ Catálogo de Materiales</h2>
+    <div class="form-card">
+      <div class="catalogo-search">
+        <input type="text" id="cat-buscar" placeholder="Buscar por código o descripción..." oninput="renderCatalogo(this.value)">
+        <button class="btn btn-primario btn-sm" onclick="abrirModalAgregarMaterial()">+ Nuevo</button>
+        <button class="btn btn-gris btn-sm" onclick="document.getElementById('input-csv').click()">📥 CSV</button>
+        <input type="file" id="input-csv" accept=".csv,.txt" style="display:none" onchange="procesarCSV(event)">
+      </div>
+      <div class="tabla-wrapper">
+        <table class="tabla-catalogo">
+          <thead><tr><th style="width:130px;">Código</th><th>Descripción</th><th style="width:90px;">Acciones</th></tr></thead>
+          <tbody id="tbody-catalogo"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CONFIGURACIÓN ── -->
+  <div id="sec-config" class="seccion">
+    <h2 class="titulo-seccion">⚙️ Configuración</h2>
+    <div class="config-grid">
+
+      <!-- Firebase -->
+      <div class="config-card">
+        <h4>🔥 Firebase</h4>
+        <p style="font-size:11.5px;color:#666;margin-bottom:10px;line-height:1.5;">
+          Estado de conexión actual con la base de datos en la nube.
+        </p>
+        <div id="cfg-firebase-estado" style="font-size:12px;margin-bottom:10px;"></div>
+        <button class="btn btn-peligro btn-sm" onclick="reconfigurarFirebase()" style="width:100%;margin-bottom:6px;">
+          🔄 Reconfigurar Firebase
+        </button>
+        <button class="btn btn-gris btn-sm" onclick="usarSoloLocal()" style="width:100%;">
+          💾 Cambiar a modo local
+        </button>
+      </div>
+
+      <!-- Logos -->
+      <div class="config-card">
+        <h4>Logos</h4>
+        <p style="font-size:11px;color:#777;margin-bottom:7px;">Logo izquierdo — FOGA</p>
+        <div class="logo-preview-box" id="prev-logo-foga"><span style="color:#aaa;font-size:12px;">Sin logo</span></div>
+        <input type="file" id="inp-logo-foga" accept="image/*" onchange="subirLogo('foga',event)" style="margin-top:6px;width:100%;">
+        <button class="btn btn-peligro btn-xs" style="margin-top:5px;" onclick="eliminarLogo('foga')">✕ Quitar</button>
+        <p style="font-size:11px;color:#777;margin-top:13px;margin-bottom:7px;">Logo derecho — Equifrigo</p>
+        <div class="logo-preview-box" id="prev-logo-equi"><span style="color:#aaa;font-size:12px;">Sin logo</span></div>
+        <input type="file" id="inp-logo-equi" accept="image/*" onchange="subirLogo('equi',event)" style="margin-top:6px;width:100%;">
+        <button class="btn btn-peligro btn-xs" style="margin-top:5px;" onclick="eliminarLogo('equi')">✕ Quitar</button>
+      </div>
+
+      <!-- Diseñadores -->
+      <div class="config-card">
+        <h4>Diseñadores</h4>
+        <div id="lista-disenadores"></div>
+        <div class="config-input-row">
+          <input type="text" id="inp-nuevo-disenador" placeholder="Nombre completo">
+          <button class="btn btn-primario btn-sm" onclick="agregarOpcion('disenadores','inp-nuevo-disenador')">+</button>
+        </div>
+      </div>
+
+      <!-- Solicitantes -->
+      <div class="config-card">
+        <h4>Solicitantes / Maestros</h4>
+        <div id="lista-solicitantes"></div>
+        <div class="config-input-row">
+          <input type="text" id="inp-nuevo-solicitante" placeholder="Nombre completo">
+          <button class="btn btn-primario btn-sm" onclick="agregarOpcion('solicitantes','inp-nuevo-solicitante')">+</button>
+        </div>
+      </div>
+
+      <!-- Motivos -->
+      <div class="config-card">
+        <h4>Motivos</h4>
+        <div id="lista-motivos"></div>
+        <div class="config-input-row">
+          <input type="text" id="inp-nuevo-motivo" placeholder="Nuevo motivo">
+          <button class="btn btn-primario btn-sm" onclick="agregarOpcion('motivos','inp-nuevo-motivo')">+</button>
+        </div>
+      </div>
+
+      <!-- Responsables -->
+      <div class="config-card">
+        <h4>Responsables en Ficha</h4>
+        <div class="form-group" style="margin-bottom:9px;">
+          <label>Jefe de Planta</label>
+          <input type="text" id="cfg-jefe-planta" placeholder="JUAN PABLO LEÓN">
+        </div>
+        <div class="form-group" style="margin-bottom:9px;">
+          <label>Entrega / Bodega</label>
+          <input type="text" id="cfg-bodega" placeholder="ARIEL SAGBAY">
+        </div>
+        <div class="form-group" style="margin-bottom:11px;">
+          <label>Operador</label>
+          <input type="text" id="cfg-operador" placeholder="JONATHAN UWJINT">
+        </div>
+        <button class="btn btn-exito btn-sm" onclick="guardarResponsables()">💾 Guardar</button>
+      </div>
+
+      <!-- Respaldo -->
+      <div class="config-card">
+        <h4>Respaldo de Datos</h4>
+        <p style="font-size:11.5px;color:#666;margin-bottom:11px;line-height:1.5;">
+          Aunque Firebase guarda todo en la nube, puedes exportar un JSON adicional como copia de seguridad.
+        </p>
+        <button class="btn btn-alerta" onclick="exportarRespaldoJSON()" style="width:100%;margin-bottom:7px;">💾 Exportar JSON</button>
+        <button class="btn btn-gris" onclick="triggerImportarJSON()" style="width:100%;margin-bottom:7px;">📂 Importar JSON</button>
+        <button class="btn btn-peligro" onclick="confirmarBorrarTodo()" style="width:100%;">🗑️ Borrar todos los datos</button>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- fin contenido-principal -->
+</div><!-- fin app -->
+
+<!-- MODAL ELIMINAR -->
+<div class="modal-overlay" id="modal-eliminar">
+  <div class="modal-box">
+    <h3>⚠️ Confirmar acción</h3>
+    <p id="modal-eliminar-texto"></p>
+    <div class="modal-acciones">
+      <button class="btn btn-gris" onclick="cerrarModal('modal-eliminar')">Cancelar</button>
+      <button class="btn btn-peligro" id="btn-confirmar-eliminar">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MATERIAL -->
+<div class="modal-overlay" id="modal-nuevo-material">
+  <div class="modal-box">
+    <h3>➕ Material del Catálogo</h3>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>Código</label>
+      <input type="text" id="m-codigo" placeholder="Ej: PAI485">
+    </div>
+    <div class="form-group" style="margin-bottom:16px;">
+      <label>Descripción</label>
+      <input type="text" id="m-descripcion" placeholder="Ej: Plancha Acero Inox 1.5-304">
+    </div>
+    <div class="modal-acciones">
+      <button class="btn btn-gris" onclick="cerrarModal('modal-nuevo-material')">Cancelar</button>
+      <button class="btn btn-exito" onclick="guardarNuevoMaterial()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════
+   CONSTANTES Y ESTADO
+══════════════════════════════════════════ */
+const CLAVE_LS        = 'fogaEquifrigo_v2';
+const CLAVE_FB_CONFIG = 'fogaFirebaseConfig';
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Objeto estado (igual que antes — la fuente de verdad en RAM)
+let estado = {
+  requerimientos: {},   // { "YYYY-MM": [req,...] }
+  materiales:     [],
+  disenadores:    [],
+  solicitantes:   [],
+  motivos:        [],
+  responsables:   { jefeDePlanta:'JUAN PABLO LEÓN', bodega:'ARIEL SAGBAY', operador:'JONATHAN UWJINT' },
+  logos:          { foga: null, equi: null },
+  editandoId:     null,
+  mesActivo:      null,
+  anioActivo:     null,
+  matTemporal:    null,
+  matsFormulario: [],
+  fichaActivaId:  null,
+};
+
+// Referencia a Firestore y modo de trabajo
+let db          = null;   // instancia de Firestore
+let modoFirebase = false; // true = Firebase, false = localStorage
+let oyentesActivos = [];  // para desuscribir listeners de Firestore
+
+/* ══════════════════════════════════════════
+   ARRANQUE
+══════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', () => {
+  const cfgGuardada = localStorage.getItem(CLAVE_FB_CONFIG);
+  if (cfgGuardada) {
+    try {
+      const cfg = JSON.parse(cfgGuardada);
+      if (cfg.modoLocal) {
+        // Usuario eligió modo local
+        ocultarPantallaConfig();
+        iniciarModoLocal();
+      } else {
+        // Reconectar automáticamente con la config guardada
+        inicializarFirebaseConConfig(cfg);
+      }
+    } catch(e) {
+      mostrarPantallaConfig();
+    }
+  } else {
+    mostrarPantallaConfig();
+  }
+});
+
+/* ══════════════════════════════════════════
+   PANTALLA DE CONFIGURACIÓN FIREBASE
+══════════════════════════════════════════ */
+function mostrarPantallaConfig() {
+  document.getElementById('pantalla-config-firebase').style.display = 'flex';
+}
+
+function ocultarPantallaConfig() {
+  document.getElementById('pantalla-config-firebase').style.display = 'none';
+}
+
+function reconfigurarFirebase() {
+  // Limpiar config guardada y mostrar pantalla
+  localStorage.removeItem(CLAVE_FB_CONFIG);
+  desuscribirOyentes();
+  db = null;
+  modoFirebase = false;
+  mostrarPantallaConfig();
+}
+
+/* ══════════════════════════════════════════
+   CONECTAR FIREBASE
+══════════════════════════════════════════ */
+function conectarFirebase() {
+  const apiKey     = document.getElementById('fb-apiKey').value.trim();
+  const authDomain = document.getElementById('fb-authDomain').value.trim();
+  const projectId  = document.getElementById('fb-projectId').value.trim();
+  const appId      = document.getElementById('fb-appId').value.trim();
+
+  if (!apiKey || !authDomain || !projectId || !appId) {
+    document.getElementById('fb-error-msg').style.display = 'block';
+    document.getElementById('fb-error-msg').textContent = '⚠️ Completa todos los campos.';
+    return;
+  }
+
+  const cfg = { apiKey, authDomain, projectId, appId };
+  inicializarFirebaseConConfig(cfg);
+}
+
+function inicializarFirebaseConConfig(cfg) {
+  try {
+    setBadge('sync', '⏳ Conectando...');
+    const btn = document.getElementById('btn-conectar-firebase');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Conectando...'; }
+
+    // Inicializar Firebase (evita error si ya fue inicializado)
+    let app;
+    if (firebase.apps.length === 0) {
+      app = firebase.initializeApp(cfg);
+    } else {
+      app = firebase.apps[0];
+    }
+
+    db = firebase.firestore();
+
+    // Prueba de conexión: leer un documento
+    db.collection('_ping').doc('test').set({ ts: Date.now() })
+      .then(() => {
+        modoFirebase = true;
+        // Guardar config para reconexión automática
+        localStorage.setItem(CLAVE_FB_CONFIG, JSON.stringify(cfg));
+        ocultarPantallaConfig();
+        setBadge('online', '🔥 Firebase');
+        actualizarBanner('🔥 Modo Firebase activo — los datos se sincronizan entre todas las computadoras.');
+        actualizarEstadoConfigFirebase(true, cfg.projectId);
+        iniciarModoFirebase();
+      })
+      .catch(err => {
+        console.error('Firebase error:', err);
+        document.getElementById('fb-error-msg').style.display = 'block';
+        document.getElementById('fb-error-msg').textContent =
+          '⚠️ No se pudo conectar: ' + err.message;
+        setBadge('offline', '❌ Sin conexión');
+        if (btn) { btn.disabled = false; btn.textContent = '🔥 Conectar'; }
+      });
+  } catch(e) {
+    console.error(e);
+    document.getElementById('fb-error-msg').style.display = 'block';
+    document.getElementById('fb-error-msg').textContent = '⚠️ Error: ' + e.message;
+  }
+}
+
+/* ══════════════════════════════════════════
+   MODO LOCAL (sin Firebase)
+══════════════════════════════════════════ */
+function usarSoloLocal() {
+  modoFirebase = false;
+  localStorage.setItem(CLAVE_FB_CONFIG, JSON.stringify({ modoLocal: true }));
+  ocultarPantallaConfig();
+  setBadge('offline', '💾 Local');
+  actualizarBanner('⚠️ Modo LOCAL — los datos solo se guardan en ESTE navegador. Exporta un respaldo JSON periódicamente.');
+  actualizarEstadoConfigFirebase(false);
+  iniciarModoLocal();
+}
+
+/* ══════════════════════════════════════════
+   INICIAR MODO LOCAL
+══════════════════════════════════════════ */
+function iniciarModoLocal() {
+  cargarDatosLocales();
+  finalizarInicializacion();
+}
+
+/* ══════════════════════════════════════════
+   INICIAR MODO FIREBASE
+══════════════════════════════════════════ */
+function iniciarModoFirebase() {
+  // Cargar datos de Firestore y suscribir listeners en tiempo real
+  cargarTodoDesdeFirebase().then(() => {
+    suscribirRequerimientos();
+    suscribirConfig();
+    finalizarInicializacion();
+  });
+}
+
+/* ══════════════════════════════════════════
+   SUSCRIPCIONES EN TIEMPO REAL (Firestore)
+══════════════════════════════════════════ */
+function suscribirRequerimientos() {
+  // Escucha cambios en la colección "requerimientos" en tiempo real
+  const unsub = db.collection('requerimientos').onSnapshot(snapshot => {
+    // Reconstruir el objeto por mes desde los docs de Firestore
+    estado.requerimientos = {};
+    snapshot.forEach(doc => {
+      const req = { id: doc.id, ...doc.data() };
+      const clave = obtenerMesClave(req.fecha);
+      if (clave) {
+        if (!estado.requerimientos[clave]) estado.requerimientos[clave] = [];
+        // Evitar duplicados si ya existe el id
+        const existe = estado.requerimientos[clave].findIndex(r => r.id === req.id);
+        if (existe >= 0) estado.requerimientos[clave][existe] = req;
+        else estado.requerimientos[clave].push(req);
+      }
+    });
+    renderRegistroMensual();
+    setBadge('online', '🔥 Firebase');
+  }, err => {
+    console.error('Listener requerimientos:', err);
+    setBadge('offline', '❌ Sin conexión');
+  });
+  oyentesActivos.push(unsub);
+}
+
+function suscribirConfig() {
+  // Escucha el documento de configuración compartida
+  const unsub = db.collection('config').doc('principal').onSnapshot(doc => {
+    if (doc.exists) {
+      const d = doc.data();
+      if (d.materiales   && d.materiales.length)   estado.materiales   = d.materiales;
+      if (d.disenadores  && d.disenadores.length)  estado.disenadores  = d.disenadores;
+      if (d.solicitantes && d.solicitantes.length) estado.solicitantes = d.solicitantes;
+      if (d.motivos      && d.motivos.length)      estado.motivos      = d.motivos;
+      if (d.responsables) estado.responsables = d.responsables;
+      if (d.logos)        estado.logos        = d.logos;
+      poblarSelectsFormulario();
+      renderCatalogo();
+      renderConfigListas();
+      cargarLogosConfig();
+      cargarResponsablesConfig();
+    }
+  });
+  oyentesActivos.push(unsub);
+}
+
+function desuscribirOyentes() {
+  oyentesActivos.forEach(fn => { try { fn(); } catch(e) {} });
+  oyentesActivos = [];
+}
+
+/* ══════════════════════════════════════════
+   CARGAR TODO DESDE FIRESTORE (una sola vez)
+══════════════════════════════════════════ */
+async function cargarTodoDesdeFirebase() {
+  try {
+    // Requerimientos
+    const reqSnap = await db.collection('requerimientos').get();
+    estado.requerimientos = {};
+    reqSnap.forEach(doc => {
+      const req = { id: doc.id, ...doc.data() };
+      const clave = obtenerMesClave(req.fecha);
+      if (clave) {
+        if (!estado.requerimientos[clave]) estado.requerimientos[clave] = [];
+        estado.requerimientos[clave].push(req);
+      }
+    });
+
+    // Config
+    const cfgDoc = await db.collection('config').doc('principal').get();
+    if (cfgDoc.exists) {
+      const d = cfgDoc.data();
+      if (d.materiales   && d.materiales.length)   estado.materiales   = d.materiales;
+      if (d.disenadores  && d.disenadores.length)  estado.disenadores  = d.disenadores;
+      if (d.solicitantes && d.solicitantes.length) estado.solicitantes = d.solicitantes;
+      if (d.motivos      && d.motivos.length)      estado.motivos      = d.motivos;
+      if (d.responsables) estado.responsables = d.responsables;
+      if (d.logos)        estado.logos        = d.logos;
+    } else {
+      // Primera vez: subir datos default a Firebase
+      inicializarDatosDefault();
+      await guardarConfigEnFirebase();
+    }
+  } catch(e) {
+    console.error('cargarTodoDesdeFirebase:', e);
+    mostrarToast('Error al cargar desde Firebase: ' + e.message, 'error');
+  }
+}
+
+/* ══════════════════════════════════════════
+   GUARDAR EN FIREBASE
+══════════════════════════════════════════ */
+// Guarda o actualiza un requerimiento individual en Firestore
+async function guardarRequerimientoEnFirebase(req) {
+  try {
+    await db.collection('requerimientos').doc(req.id).set(req);
+  } catch(e) {
+    mostrarToast('Error al guardar en Firebase: ' + e.message, 'error');
+    throw e;
+  }
+}
+
+// Elimina un requerimiento de Firestore
+async function eliminarRequerimientoDeFirebase(id) {
+  try {
+    await db.collection('requerimientos').doc(id).delete();
+  } catch(e) {
+    mostrarToast('Error al eliminar en Firebase: ' + e.message, 'error');
+    throw e;
+  }
+}
+
+// Guarda la configuración compartida (materiales, listas, logos, responsables)
+async function guardarConfigEnFirebase() {
+  try {
+    await db.collection('config').doc('principal').set({
+      materiales:   estado.materiales,
+      disenadores:  estado.disenadores,
+      solicitantes: estado.solicitantes,
+      motivos:      estado.motivos,
+      responsables: estado.responsables,
+      logos:        estado.logos,
+    });
+  } catch(e) {
+    mostrarToast('Error al guardar configuración: ' + e.message, 'error');
+  }
+}
+
+/* ══════════════════════════════════════════
+   GUARDAR DATOS (decide modo)
+══════════════════════════════════════════ */
+// Guardar requerimiento (decide Firebase o local)
+async function persistirRequerimiento(req) {
+  if (modoFirebase && db) {
+    await guardarRequerimientoEnFirebase(req);
+    // El listener onSnapshot actualizará el estado y re-renderizará
+  } else {
+    guardarDatosLocales();
+  }
+}
+
+// Eliminar requerimiento (decide Firebase o local)
+async function persistirEliminarRequerimiento(id) {
+  if (modoFirebase && db) {
+    await eliminarRequerimientoDeFirebase(id);
+    // El listener onSnapshot actualizará
+  } else {
+    guardarDatosLocales();
+  }
+}
+
+// Guardar config (decide Firebase o local)
+async function persistirConfig() {
+  if (modoFirebase && db) {
+    await guardarConfigEnFirebase();
+  } else {
+    guardarDatosLocales();
+  }
+}
+
+/* ══════════════════════════════════════════
+   ALMACENAMIENTO LOCAL (fallback)
+══════════════════════════════════════════ */
+function cargarDatosLocales() {
+  try {
+    const raw = localStorage.getItem(CLAVE_LS);
+    if (!raw) { inicializarDatosDefault(); return; }
+    const d = JSON.parse(raw);
+    estado.requerimientos = d.requerimientos || {};
+    estado.materiales     = (d.materiales   && d.materiales.length)   ? d.materiales   : materialesDefault();
+    estado.disenadores    = (d.disenadores  && d.disenadores.length)  ? d.disenadores  : disenadores_default();
+    estado.solicitantes   = (d.solicitantes && d.solicitantes.length) ? d.solicitantes : solicitantes_default();
+    estado.motivos        = (d.motivos      && d.motivos.length)      ? d.motivos      : motivos_default();
+    estado.responsables   = d.responsables || { jefeDePlanta:'JUAN PABLO LEÓN', bodega:'ARIEL SAGBAY', operador:'JONATHAN UWJINT' };
+    estado.logos          = d.logos        || { foga: null, equi: null };
+  } catch(e) { inicializarDatosDefault(); }
+}
+
+function guardarDatosLocales() {
+  try {
+    localStorage.setItem(CLAVE_LS, JSON.stringify({
+      requerimientos: estado.requerimientos,
+      materiales:     estado.materiales,
+      disenadores:    estado.disenadores,
+      solicitantes:   estado.solicitantes,
+      motivos:        estado.motivos,
+      responsables:   estado.responsables,
+      logos:          estado.logos,
+    }));
+  } catch(e) {
+    mostrarToast('⚠️ localStorage lleno. Exporta un respaldo.', 'error');
+  }
+}
+
+/* ══════════════════════════════════════════
+   FINALIZAR INICIALIZACIÓN (común a ambos modos)
+══════════════════════════════════════════ */
+function finalizarInicializacion() {
+  const hoy = new Date();
+  estado.anioActivo = hoy.getFullYear();
+  estado.mesActivo  = hoy.getMonth() + 1;
+  document.getElementById('f-fecha').value = hoy.toISOString().split('T')[0];
+  poblarSelectAnio();
+  poblarBotonesMeses();
+  poblarSelectsFormulario();
+  renderRegistroMensual();
+  renderCatalogo();
+  renderConfigListas();
+  cargarLogosConfig();
+  cargarResponsablesConfig();
+}
+
+/* ══════════════════════════════════════════
+   DATOS DEFAULT
+══════════════════════════════════════════ */
+function inicializarDatosDefault() {
+  estado.materiales   = materialesDefault();
+  estado.disenadores  = disenadores_default();
+  estado.solicitantes = solicitantes_default();
+  estado.motivos      = motivos_default();
+}
+function materialesDefault() {
+  return [
+    {codigo:'PAI485',descripcion:'Plancha Acero Inox 1.5-304'},
+    {codigo:'PAI460',descripcion:'Plancha Acero Inox 1.2-304'},
+    {codigo:'PAI500',descripcion:'Plancha Acero Inox 2.0-304'},
+    {codigo:'PAI320',descripcion:'Plancha Acero Inox 0.8-304'},
+    {codigo:'PEI485',descripcion:'Plancha Estriada Inox 1.5-304'},
+    {codigo:'TCA100',descripcion:'Tubo Cuadrado Acero 1 pulgada'},
+    {codigo:'TRE200',descripcion:'Tubo Redondo Acero 2 pulgadas'},
+    {codigo:'ANG050',descripcion:'Angulo Acero 50x50x4mm'},
+    {codigo:'PGA100',descripcion:'Perfil G Acero 100mm'},
+    {codigo:'VRO010',descripcion:'Varilla Roscada M10'},
+    {codigo:'TOR010',descripcion:'Tornillo Inox M10x30'},
+    {codigo:'TOR008',descripcion:'Tornillo Inox M8x20'},
+    {codigo:'ELE001',descripcion:'Electrodo 6011 3/32'},
+    {codigo:'ELE002',descripcion:'Electrodo 6013 1/8'},
+    {codigo:'DSK001',descripcion:'Disco Corte Inox 7 pulgadas'},
+    {codigo:'DSK002',descripcion:'Disco Desbaste Inox 7 pulgadas'},
+    {codigo:'FIB001',descripcion:'Fibra Cerámica Aislante'},
+    {codigo:'SIL001',descripcion:'Silicona Alta Temperatura'},
+  ];
+}
+function disenadores_default()  { return ['Juan Peralta','Santiago Vanegas','Manuel Aguirre','Joaquín Chica']; }
+function solicitantes_default() { return ['Paúl Laica','Jose Luis Yanza','Diego Montero','Jose Luis Pesantez','Jaime Dominguez','Michael Aguayza','Bryam Casierra']; }
+function motivos_default()      { return ['STOCK','REPROCESO','ADICIONAL','CAMBIO','GARANTÍA','OTRO']; }
+
+/* ══════════════════════════════════════════
+   BADGE Y BANNER
+══════════════════════════════════════════ */
+function setBadge(tipo, texto) {
+  const el = document.getElementById('badge-conexion');
+  el.className = tipo;
+  el.innerHTML = `<span class="dot"></span> ${texto}`;
+}
+function actualizarBanner(texto) {
+  document.getElementById('texto-banner').innerHTML = texto;
+}
+function actualizarEstadoConfigFirebase(conectado, projectId) {
+  const el = document.getElementById('cfg-firebase-estado');
+  if (!el) return;
+  if (conectado) {
+    el.innerHTML = `<span style="color:var(--verde);font-weight:700;">✓ Conectado</span> — Proyecto: <code>${projectId}</code>`;
+  } else {
+    el.innerHTML = '<span style="color:var(--rojo);font-weight:700;">✗ Modo local (sin Firebase)</span>';
+  }
+}
+
+/* ══════════════════════════════════════════
+   NAVEGACIÓN
+══════════════════════════════════════════ */
+function cambiarSeccion(id) {
+  document.querySelectorAll('.seccion').forEach(s => s.classList.remove('activa'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const sec = document.getElementById('sec-' + id);
+  if (sec) sec.classList.add('activa');
+  const tab = document.querySelector(`.nav-tab[data-sec="${id}"]`);
+  if (tab) tab.classList.add('active');
+}
+
+/* ══════════════════════════════════════════
+   SELECTOR AÑO / MES
+══════════════════════════════════════════ */
+function poblarSelectAnio() {
+  const sel = document.getElementById('sel-anio');
+  sel.innerHTML = '';
+  const base = new Date().getFullYear();
+  for (let a = base - 3; a <= base + 2; a++) {
+    const o = document.createElement('option');
+    o.value = a; o.textContent = a;
+    if (a === estado.anioActivo) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+function poblarBotonesMeses() {
+  const cont = document.getElementById('meses-botones');
+  cont.innerHTML = '';
+  MESES.forEach((nombre, idx) => {
+    const mes = idx + 1;
+    const btn = document.createElement('button');
+    btn.className = 'btn-mes' + (mes === estado.mesActivo ? ' activo' : '');
+    btn.textContent = nombre.substring(0,3);
+    btn.title = nombre;
+    btn.onclick = () => {
+      estado.mesActivo = mes;
+      document.querySelectorAll('.btn-mes').forEach(b => b.classList.remove('activo'));
+      btn.classList.add('activo');
+      renderRegistroMensual();
+    };
+    cont.appendChild(btn);
+  });
+}
+function onAnioChange() {
+  estado.anioActivo = parseInt(document.getElementById('sel-anio').value);
+  renderRegistroMensual();
+}
+function obtenerMesClave(fechaStr) {
+  if (!fechaStr) return null;
+  const p = String(fechaStr).split('-');
+  return p.length >= 2 ? `${p[0]}-${p[1]}` : null;
+}
+
+/* ══════════════════════════════════════════
+   SELECTS FORMULARIO
+══════════════════════════════════════════ */
+function poblarSelectsFormulario() {
+  const llenar = (id, lista) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const val = sel.value;
+    sel.innerHTML = '<option value="">-- Seleccionar --</option>';
+    lista.forEach(item => {
+      const o = document.createElement('option');
+      o.value = item; o.textContent = item;
+      sel.appendChild(o);
+    });
+    if (val) sel.value = val;
+  };
+  llenar('f-solicitado', estado.solicitantes);
+  llenar('f-disenador',  estado.disenadores);
+  llenar('f-motivo',     estado.motivos);
+}
+
+/* ══════════════════════════════════════════
+   CREAR / LIMPIAR FORMULARIO
+══════════════════════════════════════════ */
+function crearNuevoRequerimiento() {
+  estado.editandoId = null;
+  estado.matsFormulario = [];
+  estado.matTemporal = null;
+  limpiarFormulario();
+  document.getElementById('titulo-formulario').textContent = '➕ Nuevo Requerimiento';
+  cambiarSeccion('nuevo');
+}
+function limpiarFormulario() {
+  const hoy = new Date().toISOString().split('T')[0];
+  ['f-fecha','f-cliente','f-pec','f-componente','f-link'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = id === 'f-fecha' ? hoy : '';
+  });
+  ['f-solicitado','f-disenador','f-motivo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('f-observacion').value = '';
+  limpiarImagen();
+  estado.matsFormulario = [];
+  estado.matTemporal = null;
+  document.getElementById('buscador-material-input').value = '';
+  document.getElementById('mat-cantidad').value = '';
+  document.getElementById('mat-unidad').value = '';
+  document.getElementById('mat-requerimiento').value = '';
+  document.getElementById('material-seleccionado-info').textContent = '';
+  document.getElementById('dropdown-materiales').classList.remove('visible');
+  renderMaterialesFormulario();
+  limpiarErrores();
+}
+function limpiarImagen() {
+  document.getElementById('f-imagen').value = '';
+  const img = document.getElementById('preview-imagen');
+  img.src = ''; img.style.display = 'none';
+}
+function limpiarErrores() {
+  ['fecha','solicitado','cliente','pec','motivo','disenador','link'].forEach(id => {
+    const e = document.getElementById('err-' + id);
+    if (e) e.textContent = '';
+    const f = document.getElementById('f-' + id);
+    if (f) f.classList.remove('error');
+  });
+  document.getElementById('span-err-materiales').textContent = '';
+}
+
+/* ══════════════════════════════════════════
+   VALIDAR
+══════════════════════════════════════════ */
+function validarRequerimiento() {
+  limpiarErrores();
+  let ok = true;
+  [['f-fecha','err-fecha','Fecha'],['f-solicitado','err-solicitado','Solicitado por'],
+   ['f-cliente','err-cliente','Cliente'],['f-pec','err-pec','N. Orden / PEC'],
+   ['f-motivo','err-motivo','Motivo'],['f-disenador','err-disenador','Diseñador'],
+   ['f-link','err-link','Link / URL (escribe la URL o N/A)']].forEach(([fid,eid,lbl]) => {
+    const el = document.getElementById(fid);
+    if (!el || !el.value.trim()) {
+      if (el) el.classList.add('error');
+      const err = document.getElementById(eid);
+      if (err) err.textContent = `${lbl} es obligatorio.`;
+      ok = false;
+    }
+  });
+  if (estado.matsFormulario.length === 0) {
+    document.getElementById('span-err-materiales').textContent = 'Agrega al menos un material con cantidad.';
+    ok = false;
+  } else if (estado.matsFormulario.some(m => !String(m.cantidad).trim())) {
+    document.getElementById('span-err-materiales').textContent = 'Todos los materiales deben tener cantidad.';
+    ok = false;
+  }
+  return ok;
+}
+
+/* ══════════════════════════════════════════
+   GUARDAR REQUERIMIENTO
+══════════════════════════════════════════ */
+async function guardarRequerimiento() {
+  if (!validarRequerimiento()) { mostrarToast('Revisa los campos en rojo.', 'error'); return; }
+
+  const btn = document.getElementById('btn-guardar-req');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Guardando...';
+
+  const fecha = document.getElementById('f-fecha').value;
+  const clave = obtenerMesClave(fecha);
+  if (!clave) { mostrarToast('Fecha inválida.', 'error'); btn.disabled=false; btn.textContent='💾 Guardar Requerimiento'; return; }
+
+  const imgEl = document.getElementById('preview-imagen');
+  const imagenB64 = (imgEl && imgEl.style.display !== 'none' && imgEl.src && imgEl.src.startsWith('data:')) ? imgEl.src : null;
+
+  const req = {
+    id:          estado.editandoId || generarId(),
+    fecha,
+    solicitado:  document.getElementById('f-solicitado').value.trim(),
+    cliente:     document.getElementById('f-cliente').value.trim(),
+    pec:         document.getElementById('f-pec').value.trim(),
+    motivo:      document.getElementById('f-motivo').value.trim(),
+    disenador:   document.getElementById('f-disenador').value.trim(),
+    componente:  document.getElementById('f-componente').value.trim(),
+    link:        document.getElementById('f-link').value.trim(),
+    materiales:  estado.matsFormulario.map(m => ({...m})),
+    imagen:      imagenB64,
+    observacion: document.getElementById('f-observacion').value.trim(),
+    creado:      new Date().toISOString(),
+  };
+
+  try {
+    // Si es edición en modo local: eliminar original primero
+    if (estado.editandoId && !modoFirebase) {
+      for (const k in estado.requerimientos) {
+        const idx = estado.requerimientos[k].findIndex(r => r.id === estado.editandoId);
+        if (idx !== -1) {
+          estado.requerimientos[k].splice(idx, 1);
+          if (!estado.requerimientos[k].length) delete estado.requerimientos[k];
+          break;
+        }
+      }
+    }
+
+    // En modo local: actualizar estado en RAM
+    if (!modoFirebase) {
+      if (!estado.requerimientos[clave]) estado.requerimientos[clave] = [];
+      const idx = estado.requerimientos[clave].findIndex(r => r.id === req.id);
+      if (idx >= 0) estado.requerimientos[clave][idx] = req;
+      else estado.requerimientos[clave].push(req);
+    }
+
+    await persistirRequerimiento(req);
+
+    // Actualizar mes activo
+    const fd = new Date(fecha + 'T12:00:00');
+    estado.mesActivo  = fd.getMonth() + 1;
+    estado.anioActivo = fd.getFullYear();
+    document.getElementById('sel-anio').value = estado.anioActivo;
+    poblarBotonesMeses();
+
+    estado.editandoId = null;
+    limpiarFormulario();
+    mostrarToast('Requerimiento guardado ✓', 'exito');
+    cambiarSeccion('registro');
+    if (!modoFirebase) renderRegistroMensual();
+  } catch(e) {
+    mostrarToast('Error al guardar: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '💾 Guardar Requerimiento';
+  }
+}
+
+/* ══════════════════════════════════════════
+   EDITAR / DUPLICAR / ELIMINAR
+══════════════════════════════════════════ */
+function editarRequerimiento(id) {
+  const req = buscarPorId(id);
+  if (!req) return;
+  estado.editandoId     = id;
+  estado.matsFormulario = req.materiales ? req.materiales.map(m=>({...m})) : [];
+  estado.matTemporal    = null;
+  document.getElementById('f-fecha').value       = req.fecha       || '';
+  document.getElementById('f-solicitado').value  = req.solicitado  || '';
+  document.getElementById('f-cliente').value     = req.cliente     || '';
+  document.getElementById('f-pec').value         = req.pec         || '';
+  document.getElementById('f-motivo').value      = req.motivo      || '';
+  document.getElementById('f-disenador').value   = req.disenador   || '';
+  document.getElementById('f-componente').value  = req.componente  || '';
+  document.getElementById('f-link').value        = req.link        || '';
+  document.getElementById('f-observacion').value = req.observacion || '';
+  const imgEl = document.getElementById('preview-imagen');
+  if (req.imagen) { imgEl.src = req.imagen; imgEl.style.display = 'block'; }
+  else { imgEl.src = ''; imgEl.style.display = 'none'; }
+  document.getElementById('buscador-material-input').value = '';
+  document.getElementById('material-seleccionado-info').textContent = '';
+  renderMaterialesFormulario();
+  limpiarErrores();
+  document.getElementById('titulo-formulario').textContent = '✏️ Editar Requerimiento';
+  cambiarSeccion('nuevo');
+}
+
+async function duplicarRequerimiento(id) {
+  const req = buscarPorId(id);
+  if (!req) return;
+  const copia = { ...req, id: generarId(), pec: req.pec+'-COPIA', creado: new Date().toISOString(),
+    materiales: req.materiales ? req.materiales.map(m=>({...m})) : [] };
+  if (!modoFirebase) {
+    const clave = obtenerMesClave(copia.fecha);
+    if (!estado.requerimientos[clave]) estado.requerimientos[clave] = [];
+    estado.requerimientos[clave].push(copia);
+  }
+  await persistirRequerimiento(copia);
+  if (!modoFirebase) renderRegistroMensual();
+  mostrarToast('Requerimiento duplicado ✓', 'exito');
+}
+
+function eliminarRequerimiento(id) {
+  document.getElementById('modal-eliminar-texto').textContent =
+    '¿Eliminar este requerimiento? Esta acción no se puede deshacer.';
+  document.getElementById('btn-confirmar-eliminar').onclick = async () => {
+    // En modo local: eliminar del estado RAM
+    if (!modoFirebase) {
+      for (const k in estado.requerimientos) {
+        const idx = estado.requerimientos[k].findIndex(r => r.id === id);
+        if (idx !== -1) {
+          estado.requerimientos[k].splice(idx, 1);
+          if (!estado.requerimientos[k].length) delete estado.requerimientos[k];
+          break;
+        }
+      }
+    }
+    await persistirEliminarRequerimiento(id);
+    cerrarModal('modal-eliminar');
+    if (!modoFirebase) renderRegistroMensual();
+    mostrarToast('Requerimiento eliminado.', 'error');
+  };
+  abrirModal('modal-eliminar');
+}
+
+function buscarPorId(id) {
+  for (const k in estado.requerimientos) {
+    const r = estado.requerimientos[k].find(r => r.id === id);
+    if (r) return r;
+  }
+  return null;
+}
+
+/* ══════════════════════════════════════════
+   RENDER REGISTRO MENSUAL
+══════════════════════════════════════════ */
+function renderRegistroMensual() {
+  const anio  = parseInt(document.getElementById('sel-anio').value) || estado.anioActivo;
+  const clave = `${anio}-${String(estado.mesActivo).padStart(2,'0')}`;
+  // Ordenar por fecha de creación descendente: el más reciente primero
+  const lista = (estado.requerimientos[clave] || [])
+    .slice().sort((a,b) => {
+      const ta = a.creado || a.fecha || '';
+      const tb = b.creado || b.fecha || '';
+      return tb > ta ? 1 : tb < ta ? -1 : 0;
+    });
+  const tbody = document.getElementById('tbody-registro');
+  tbody.innerHTML = '';
+  if (lista.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="estado-vacio">
+      <div class="icono">📋</div>
+      <p>Sin requerimientos en ${MESES[estado.mesActivo-1]} ${anio}.</p>
+      <button class="btn btn-primario btn-sm" style="margin-top:10px;" onclick="crearNuevoRequerimiento()">➕ Crear</button>
+    </div></td></tr>`;
+    return;
+  }
+  lista.forEach((req, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="text-align:center;font-weight:700;">${idx+1}</td>
+      <td>${formatFecha(req.fecha)}</td>
+      <td><strong>${esc(req.pec)}</strong></td>
+      <td>${esc(req.cliente)}</td>
+      <td>${esc(req.solicitado)}</td>
+      <td>${motivoBadge(req.motivo)}</td>
+      <td>${esc(req.disenador)}</td>
+      <td>${esc(req.componente||'—')}</td>
+      <td style="text-align:center;"><span class="badge">${(req.materiales||[]).length} ítem(s)</span></td>
+      <td style="text-align:center;">${renderLinkTabla(req.link)}</td>
+      <td><div class="acciones-fila">
+        <button class="btn btn-primario btn-xs" title="Ver Ficha" onclick="verFicha('${req.id}')">📄</button>
+        <button class="btn btn-gris btn-xs" title="Editar" onclick="editarRequerimiento('${req.id}')">✏️</button>
+        <button class="btn btn-alerta btn-xs" title="Duplicar" onclick="duplicarRequerimiento('${req.id}')">📋</button>
+        <button class="btn btn-peligro btn-xs" title="Eliminar" onclick="eliminarRequerimiento('${req.id}')">🗑️</button>
+      </div></td>`;
+    tbody.appendChild(tr);
+  });
+}
+function motivoBadge(m) {
+  const map={STOCK:'badge-stock',ADICIONAL:'badge-adicional',REPROCESO:'badge-reproceso',GARANTÍA:'badge-garantia',CAMBIO:'badge-cambio',OTRO:'badge-otro'};
+  return `<span class="badge ${map[m]||''}">${esc(m)}</span>`;
+}
+function renderLinkTabla(link) {
+  if (!link || link.trim() === '' || link.trim().toUpperCase() === 'N/A') {
+    return '<span style="color:#bbb;font-size:10px;">N/A</span>';
+  }
+  const url = link.startsWith('http') ? link : 'https://' + link;
+  return `<a href="${esc(url)}" target="_blank" rel="noopener"
+    style="color:var(--acento);font-weight:700;font-size:11px;text-decoration:none;"
+    title="${esc(link)}">🔗 Ver</a>`;
+}
+function renderLinkFicha(link) {
+  if (!link || link.trim() === '' || link.trim().toUpperCase() === 'N/A') {
+    return 'N/A';
+  }
+  const url = link.startsWith('http') ? link : 'https://' + link;
+  // En ficha imprimible mostramos la URL texto + ícono clicable
+  return `<a href="${esc(url)}" target="_blank" rel="noopener"
+    style="color:#1a3a8a;font-size:9.5px;word-break:break-all;text-decoration:underline;">🔗 ${esc(link)}</a>`;
+}
+
+/* ══════════════════════════════════════════
+   FICHA TÉCNICA
+══════════════════════════════════════════ */
+function verFicha(id) {
+  const req = buscarPorId(id);
+  if (!req) return;
+  estado.fichaActivaId = id;
+  renderFichaRequerimiento(req);
+  cambiarSeccion('ficha');
+}
+function renderFichaRequerimiento(req) {
+  const resp = estado.responsables;
+  const celFoga = estado.logos.foga
+    ? `<img src="${estado.logos.foga}" alt="FOGA">`
+    : `<div class="ficha-logo-txt">FOGA<br>EQUIFRIGO</div>`;
+  const celEqui = estado.logos.equi
+    ? `<img src="${estado.logos.equi}" alt="Equifrigo">`
+    : `<div class="ficha-logo-txt">EQUIFRIGO</div>`;
+
+  const filasMat = (req.materiales||[]).map((m,i) => `<tr>
+    <td style="text-align:center;">${i+1}</td>
+    <td class="td-mat">${m.codigo?`<strong>${esc(m.codigo)}</strong> `:''}${esc(m.descripcion||'')}</td>
+    <td style="text-align:center;">${esc(m.cantidad||'')}</td>
+    <td style="text-align:center;">${esc(m.unidad||'')}</td>
+    <td class="td-mat">${esc(m.requerimiento||'')}</td>
+  </tr>`).join('');
+
+  // Zona de esquema: imagen guardada o zona de paste vacía
+  const esquemaContenido = req.imagen
+    ? `<img id="ficha-esquema-img" src="${req.imagen}" alt="Esquema">
+       <button class="btn-quitar-esquema" onclick="quitarEsquemaFicha(event)">✕ Quitar</button>`
+    : `<div class="paste-hint">
+         <div class="paste-icon">🖼️</div>
+         <p>Haz una captura de pantalla y pega aquí<br>
+           <kbd>Ctrl</kbd>+<kbd>V</kbd> — también puedes hacer clic para seleccionar archivo</p>
+       </div>`;
+
+  document.getElementById('ficha-tecnica').innerHTML = `
+    <!-- ENCABEZADO -->
+    <div class="ficha-header">
+      <div class="ficha-logo-cel">${celFoga}</div>
+      <div class="ficha-titulo-cel">
+        <h2>Requerimiento de Materia Prima</h2>
+        <div class="ficha-sub">FOGA EQUIFRIGO — Departamento de Diseño</div>
+      </div>
+      <div class="ficha-logo-cel derecho">${celEqui}</div>
+    </div>
+    <!-- DATOS -->
+    <div class="ficha-datos">
+      <div class="ficha-dato-fila"><div class="ficha-dato-lbl">Fecha</div><div class="ficha-dato-val">${formatFecha(req.fecha)}</div></div>
+      <div class="ficha-dato-fila"><div class="ficha-dato-lbl">Solicitado por</div><div class="ficha-dato-val">${esc(req.solicitado)}</div></div>
+      <div class="ficha-dato-fila"><div class="ficha-dato-lbl">Cliente</div><div class="ficha-dato-val">${esc(req.cliente)}</div></div>
+      <div class="ficha-dato-fila"><div class="ficha-dato-lbl">N. Orden / PEC</div><div class="ficha-dato-val"><strong>${esc(req.pec)}</strong></div></div>
+      <div class="ficha-dato-fila"><div class="ficha-dato-lbl">Motivo</div><div class="ficha-dato-val">${esc(req.motivo)}</div></div>
+      <div class="ficha-dato-fila"><div class="ficha-dato-lbl">Componente</div><div class="ficha-dato-val">${esc(req.componente||'—')}</div></div>
+      <div class="ficha-dato-fila" style="grid-column:span 2;"><div class="ficha-dato-lbl">Link / URL</div><div class="ficha-dato-val">${renderLinkFicha(req.link)}</div></div>
+    </div>
+    <!-- MATERIALES -->
+    <div class="ficha-seccion-titulo">Materiales</div>
+    <table class="ficha-tabla-materiales">
+      <thead><tr>
+        <th style="width:34px;">ITEM</th><th>MATERIAL</th>
+        <th style="width:68px;">CANTIDAD</th><th style="width:60px;">UNIDAD</th>
+        <th>OBSERVACIÓN</th>
+      </tr></thead>
+      <tbody>${filasMat}</tbody>
+    </table>
+    <!-- RESPONSABLES -->
+    <div class="ficha-seccion-titulo">Responsables</div>
+    <table class="ficha-tabla-resp">
+      <thead><tr><th>ROL</th><th>NOMBRE</th><th style="width:180px;">FIRMA</th></tr></thead>
+      <tbody>
+        <tr><td>Diseñador</td><td>${esc(req.disenador)}</td><td class="td-firma"></td></tr>
+        <tr><td>Jefe de Planta</td><td>${esc(resp.jefeDePlanta)}</td><td class="td-firma"></td></tr>
+        <tr><td>Entrega / Bodega</td><td>${esc(resp.bodega)}</td><td class="td-firma"></td></tr>
+        <tr><td>Operador</td><td>${esc(resp.operador)}</td><td class="td-firma"></td></tr>
+      </tbody>
+    </table>
+    <!-- ESQUEMA — zona interactiva de paste -->
+    <div class="ficha-seccion-titulo">Esquema</div>
+    <div class="ficha-esquema" id="zona-esquema"
+         tabindex="0"
+         title="Haz clic aquí y pega tu captura con Ctrl+V"
+         onclick="clickZonaEsquema(event)">
+      ${esquemaContenido}
+      <input type="file" id="input-esquema-file" accept="image/*" style="display:none" onchange="cargarEsquemaDesdeArchivo(event)">
+    </div>
+    <!-- OBSERVACIÓN -->
+    <div class="ficha-seccion-titulo">Observación General</div>
+    <div class="ficha-obs">${req.observacion ? esc(req.observacion) : '&nbsp;'}</div>`;
+
+  // Activar listeners de paste después de renderizar
+  activarPasteEsquema();
+}
+
+/* ══════════════════════════════════════════
+   ESQUEMA — PASTE (Ctrl+V) Y ARCHIVO
+══════════════════════════════════════════ */
+
+// Activa listener global de paste mientras la ficha está visible
+let _pasteListener = null;
+function activarPasteEsquema() {
+  // Remover listener anterior si existe
+  if (_pasteListener) {
+    document.removeEventListener('paste', _pasteListener);
+    _pasteListener = null;
+  }
+  _pasteListener = (e) => {
+    // Solo actuar si la sección ficha está activa
+    if (!document.getElementById('sec-ficha').classList.contains('activa')) return;
+    const items = (e.clipboardData || window.clipboardData).items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) procesarImagenEsquema(file);
+        break;
+      }
+    }
+  };
+  document.addEventListener('paste', _pasteListener);
+}
+
+// Clic en la zona: si hay imagen nada; si no, abrir selector de archivo
+function clickZonaEsquema(e) {
+  if (e.target.classList.contains('btn-quitar-esquema')) return; // no propagar
+  const zona = document.getElementById('zona-esquema');
+  if (!zona) return;
+  // Si ya hay imagen, hacer focus para capturar Ctrl+V
+  const img = document.getElementById('ficha-esquema-img');
+  if (img) { zona.focus(); return; }
+  // Si no hay imagen, abrir selector de archivo
+  const inp = document.getElementById('input-esquema-file');
+  if (inp) inp.click();
+}
+
+// Cargar desde input file (clic en zona vacía)
+function cargarEsquemaDesdeArchivo(event) {
+  const file = event.target.files[0];
+  if (file) procesarImagenEsquema(file);
+  event.target.value = '';
+}
+
+// Procesar imagen (tanto de paste como de archivo)
+function procesarImagenEsquema(file) {
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const base64 = e.target.result;
+    // Actualizar zona de esquema visualmente SIN re-renderizar toda la ficha
+    const zona = document.getElementById('zona-esquema');
+    if (zona) {
+      zona.innerHTML = `
+        <img id="ficha-esquema-img" src="${base64}" alt="Esquema" style="max-width:100%;max-height:100%;object-fit:contain;">
+        <button class="btn-quitar-esquema" onclick="quitarEsquemaFicha(event)">✕ Quitar</button>
+        <input type="file" id="input-esquema-file" accept="image/*" style="display:none" onchange="cargarEsquemaDesdeArchivo(event)">`;
+      zona.style.cursor = 'default';
+    }
+    // Guardar imagen en el requerimiento activo y persistir
+    if (estado.fichaActivaId) {
+      const req = buscarPorId(estado.fichaActivaId);
+      if (req) {
+        req.imagen = base64;
+        await persistirRequerimiento(req);
+        mostrarToast('Esquema guardado ✓', 'exito');
+      }
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// Quitar imagen del esquema
+function quitarEsquemaFicha(e) {
+  e.stopPropagation();
+  const zona = document.getElementById('zona-esquema');
+  if (zona) {
+    zona.innerHTML = `
+      <div class="paste-hint">
+        <div class="paste-icon">🖼️</div>
+        <p>Haz una captura de pantalla y pega aquí<br>
+          <kbd>Ctrl</kbd>+<kbd>V</kbd> — también puedes hacer clic para seleccionar archivo</p>
+      </div>
+      <input type="file" id="input-esquema-file" accept="image/*" style="display:none" onchange="cargarEsquemaDesdeArchivo(event)">`;
+    zona.style.cursor = 'pointer';
+  }
+  if (estado.fichaActivaId) {
+    const req = buscarPorId(estado.fichaActivaId);
+    if (req) {
+      req.imagen = null;
+      persistirRequerimiento(req);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════
+   BUSCADOR MATERIALES
+══════════════════════════════════════════ */
+function buscarMateriales(texto) {
+  const dd = document.getElementById('dropdown-materiales');
+  if (!texto || !texto.trim()) { dd.classList.remove('visible'); return; }
+  const t = texto.toLowerCase();
+  const res = estado.materiales.filter(m =>
+    m.codigo.toLowerCase().includes(t) || m.descripcion.toLowerCase().includes(t)).slice(0,20);
+  dd.innerHTML = res.length
+    ? res.map(m => `<div class="dropdown-item" onclick="seleccionarMaterial('${esc(m.codigo)}')"><strong>${esc(m.codigo)}</strong> — ${esc(m.descripcion)}</div>`).join('')
+    : '<div class="dropdown-item" style="color:#999;cursor:default;">Sin resultados</div>';
+  dd.classList.add('visible');
+}
+function seleccionarMaterial(codigo) {
+  const mat = estado.materiales.find(m => m.codigo === codigo);
+  if (!mat) return;
+  estado.matTemporal = mat;
+  document.getElementById('buscador-material-input').value = `${mat.codigo} — ${mat.descripcion}`;
+  document.getElementById('material-seleccionado-info').textContent = `✓ Seleccionado: ${mat.codigo} — ${mat.descripcion}`;
+  document.getElementById('dropdown-materiales').classList.remove('visible');
+  document.getElementById('mat-cantidad').focus();
+}
+document.addEventListener('click', e => {
+  const wrap = document.querySelector('.buscador-mat-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const dd = document.getElementById('dropdown-materiales');
+    if (dd) dd.classList.remove('visible');
+  }
+});
+
+/* ══════════════════════════════════════════
+   AGREGAR / ELIMINAR MATERIAL EN FORMULARIO
+══════════════════════════════════════════ */
+function agregarMaterialAlFormulario() {
+  if (!estado.matTemporal) { mostrarToast('Selecciona un material del buscador.', 'error'); return; }
+  const cantidad = document.getElementById('mat-cantidad').value.trim();
+  if (!cantidad) { mostrarToast('Ingresa una cantidad.', 'error'); document.getElementById('mat-cantidad').focus(); return; }
+  estado.matsFormulario.push({
+    codigo:       estado.matTemporal.codigo,
+    descripcion:  estado.matTemporal.descripcion,
+    cantidad,
+    unidad:       document.getElementById('mat-unidad').value.trim(),
+    requerimiento:document.getElementById('mat-requerimiento').value.trim(),
+  });
+  estado.matTemporal = null;
+  document.getElementById('buscador-material-input').value = '';
+  document.getElementById('mat-cantidad').value = '';
+  document.getElementById('mat-unidad').value = '';
+  document.getElementById('mat-requerimiento').value = '';
+  document.getElementById('material-seleccionado-info').textContent = '';
+  document.getElementById('span-err-materiales').textContent = '';
+  renderMaterialesFormulario();
+  document.getElementById('buscador-material-input').focus();
+}
+function eliminarMaterialDelFormulario(i) {
+  estado.matsFormulario.splice(i, 1);
+  renderMaterialesFormulario();
+}
+function renderMaterialesFormulario() {
+  const cont = document.getElementById('materiales-lista');
+  if (!estado.matsFormulario.length) {
+    cont.innerHTML = '<div style="color:#bbb;font-style:italic;font-size:12px;padding:7px 0;">Sin materiales agregados.</div>';
+    return;
+  }
+  cont.innerHTML = estado.matsFormulario.map((m,i) => `
+    <div class="material-item">
+      <div><div class="material-item-cod">${esc(m.codigo)}</div><div class="material-item-desc">${esc(m.descripcion)}</div></div>
+      <input type="text" value="${esc(m.cantidad)}" placeholder="Cant." onchange="estado.matsFormulario[${i}].cantidad=this.value">
+      <input type="text" value="${esc(m.unidad)}" placeholder="Unidad" onchange="estado.matsFormulario[${i}].unidad=this.value">
+      <input type="text" value="${esc(m.requerimiento)}" placeholder="Para qué es..." onchange="estado.matsFormulario[${i}].requerimiento=this.value">
+      <button class="btn-eliminar-mat" onclick="eliminarMaterialDelFormulario(${i})">×</button>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════════
+   IMAGEN
+══════════════════════════════════════════ */
+function previewImagen(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = document.getElementById('preview-imagen');
+    img.src = e.target.result; img.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ══════════════════════════════════════════
+   EXPORTAR PDF
+══════════════════════════════════════════ */
+async function exportarPDF() {
+  const fichaEl = document.getElementById('ficha-tecnica');
+  if (!fichaEl || !fichaEl.querySelector('.ficha-header')) {
+    mostrarToast('Abre una ficha primero.', 'error'); return;
+  }
+  mostrarToast('Generando PDF...', '');
+  try {
+    await esperarImagenes(fichaEl);
+
+    // Capturar en alta resolución (scale 3 para nitidez A4)
+    const canvas = await html2canvas(fichaEl, {
+      scale: 3,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#eaf4fb',
+      logging: false,
+      // Forzar dimensiones exactas A4
+      width: fichaEl.offsetWidth,
+      height: fichaEl.offsetHeight,
+    });
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // A4: 210 × 297 mm exactos con margen mínimo de 5mm
+    const margin = 5;
+    const pdfW = 210 - margin * 2;   // 200mm
+    const pdfH = 297 - margin * 2;   // 287mm
+
+    const imgData   = canvas.toDataURL('image/jpeg', 0.95);
+    const imgRatio  = canvas.height / canvas.width;
+    const imgH_calc = pdfW * imgRatio;
+
+    if (imgH_calc <= pdfH) {
+      // Cabe en una página — centrar verticalmente
+      const yOffset = margin + (pdfH - imgH_calc) / 2;
+      pdf.addImage(imgData, 'JPEG', margin, yOffset, pdfW, imgH_calc);
+    } else {
+      // Dividir en páginas si excede (caso con muchos materiales)
+      const escala     = pdfW / canvas.width;
+      const pxPorPag   = pdfH / escala;
+      let srcY = 0;
+      while (srcY < canvas.height) {
+        const sliceH = Math.min(pxPorPag, canvas.height - srcY);
+        const sc = document.createElement('canvas');
+        sc.width = canvas.width; sc.height = sliceH;
+        sc.getContext('2d').drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        pdf.addImage(sc.toDataURL('image/jpeg', 0.95), 'JPEG', margin, margin, pdfW, sliceH * escala);
+        srcY += sliceH;
+        if (srcY < canvas.height) pdf.addPage();
+      }
+    }
+
+    const req = estado.fichaActivaId ? buscarPorId(estado.fichaActivaId) : null;
+    let nombre = 'REQUERIMIENTO';
+    if (req) {
+      const fd  = new Date(req.fecha + 'T12:00:00');
+      const mes = MESES[fd.getMonth()].toUpperCase();
+      nombre = `REQUERIMIENTO_${mes}_${(req.pec||'').replace(/[^a-zA-Z0-9\-]/g,'')}_${(req.cliente||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,20)}`;
+    }
+    pdf.save(`${nombre}.pdf`);
+    mostrarToast('PDF exportado ✓', 'exito');
+  } catch(e) { mostrarToast('Error PDF: ' + e.message, 'error'); }
+}
+function esperarImagenes(el) {
+  const imgs = Array.from(el.querySelectorAll('img'));
+  return Promise.all(imgs.map(img =>
+    img.complete && img.naturalHeight !== 0 ? Promise.resolve()
+      : new Promise(res => { img.onload = res; img.onerror = res; })));
+}
+
+/* ══════════════════════════════════════════
+   EXPORTAR EXCEL
+══════════════════════════════════════════ */
+function exportarRegistroMensual() {
+  const anio  = parseInt(document.getElementById('sel-anio').value) || estado.anioActivo;
+  const clave = `${anio}-${String(estado.mesActivo).padStart(2,'0')}`;
+  const lista = estado.requerimientos[clave] || [];
+  if (!lista.length) { mostrarToast('No hay requerimientos en este mes.', 'error'); return; }
+  const cab = ['#','Fecha','PEC','Cliente','Solicitado por','Motivo','Diseñador','Componente','Link','Materiales','Cantidades','Unidades','Observaciones'];
+  const filas = [cab, ...lista.map((req,i) => [
+    i+1, formatFecha(req.fecha), req.pec, req.cliente, req.solicitado,
+    req.motivo, req.disenador, req.componente||'', req.link||'N/A',
+    (req.materiales||[]).map(m=>`${m.codigo} ${m.descripcion}`).join(' | '),
+    (req.materiales||[]).map(m=>m.cantidad||'').join(' | '),
+    (req.materiales||[]).map(m=>m.unidad||'').join(' | '),
+    (req.materiales||[]).map(m=>m.requerimiento||'').join(' | '),
+  ])];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols'] = [4,12,12,18,18,10,16,16,30,45,18,12,35].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, MESES[estado.mesActivo-1].substring(0,31));
+  XLSX.writeFile(wb, `REGISTRO_REQUERIMIENTOS_${MESES[estado.mesActivo-1].toUpperCase()}_${anio}.xlsx`);
+  mostrarToast('Excel exportado ✓', 'exito');
+}
+
+/* ══════════════════════════════════════════
+   RESPALDO JSON
+══════════════════════════════════════════ */
+function exportarRespaldoJSON() {
+  const datos = { version:'2.0', exportado:new Date().toISOString(),
+    requerimientos:estado.requerimientos, materiales:estado.materiales,
+    disenadores:estado.disenadores, solicitantes:estado.solicitantes,
+    motivos:estado.motivos, responsables:estado.responsables, logos:estado.logos };
+  const blob = new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `RESPALDO_FOGA_${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  mostrarToast('Respaldo JSON exportado ✓', 'exito');
+}
+function triggerImportarJSON() { document.getElementById('input-importar-json').click(); }
+async function importarRespaldoJSON(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (!d.requerimientos) throw new Error('Archivo inválido.');
+      estado.requerimientos = d.requerimientos || {};
+      if (d.materiales   && d.materiales.length)   estado.materiales   = d.materiales;
+      if (d.disenadores  && d.disenadores.length)  estado.disenadores  = d.disenadores;
+      if (d.solicitantes && d.solicitantes.length) estado.solicitantes = d.solicitantes;
+      if (d.motivos      && d.motivos.length)      estado.motivos      = d.motivos;
+      if (d.responsables) estado.responsables = d.responsables;
+      if (d.logos)        estado.logos        = d.logos;
+
+      if (modoFirebase && db) {
+        // Subir todo a Firebase
+        mostrarToast('Importando a Firebase...', '');
+        const batch = db.batch();
+        // Config
+        batch.set(db.collection('config').doc('principal'), {
+          materiales:estado.materiales, disenadores:estado.disenadores,
+          solicitantes:estado.solicitantes, motivos:estado.motivos,
+          responsables:estado.responsables, logos:estado.logos });
+        // Requerimientos
+        for (const clave in estado.requerimientos) {
+          for (const req of estado.requerimientos[clave]) {
+            batch.set(db.collection('requerimientos').doc(req.id), req);
+          }
+        }
+        await batch.commit();
+      } else {
+        guardarDatosLocales();
+      }
+      poblarSelectsFormulario(); renderRegistroMensual(); renderCatalogo();
+      renderConfigListas(); cargarLogosConfig(); cargarResponsablesConfig();
+      mostrarToast('Respaldo importado ✓', 'exito');
+    } catch(err) { mostrarToast('Error al importar: ' + err.message, 'error'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+/* ══════════════════════════════════════════
+   CATÁLOGO
+══════════════════════════════════════════ */
+function renderCatalogo(filtro) {
+  const tbody = document.getElementById('tbody-catalogo'); if (!tbody) return;
+  const t = (filtro||'').toLowerCase().trim();
+  const lista = t ? estado.materiales.filter(m => m.codigo.toLowerCase().includes(t) || m.descripcion.toLowerCase().includes(t)) : estado.materiales;
+  if (!lista.length) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:18px;color:#bbb;">Sin resultados.</td></tr>'; return; }
+  tbody.innerHTML = lista.map(m => `<tr>
+    <td><strong>${esc(m.codigo)}</strong></td>
+    <td>${esc(m.descripcion)}</td>
+    <td><div style="display:flex;gap:4px;">
+      <button class="btn btn-gris btn-xs" onclick="editarMaterialCatalogo('${esc(m.codigo)}')">✏️</button>
+      <button class="btn btn-peligro btn-xs" onclick="eliminarMaterialCatalogo('${esc(m.codigo)}')">🗑️</button>
+    </div></td></tr>`).join('');
+}
+function abrirModalAgregarMaterial() {
+  document.getElementById('m-codigo').value=''; document.getElementById('m-descripcion').value='';
+  abrirModal('modal-nuevo-material');
+}
+async function guardarNuevoMaterial() {
+  const codigo = document.getElementById('m-codigo').value.trim().toUpperCase();
+  const desc   = document.getElementById('m-descripcion').value.trim();
+  if (!codigo || !desc) { mostrarToast('Completa código y descripción.', 'error'); return; }
+  const idx = estado.materiales.findIndex(m => m.codigo === codigo);
+  if (idx >= 0) estado.materiales[idx].descripcion = desc;
+  else estado.materiales.push({codigo, descripcion:desc});
+  await persistirConfig();
+  cerrarModal('modal-nuevo-material');
+  renderCatalogo(document.getElementById('cat-buscar').value);
+  mostrarToast(idx >= 0 ? 'Material actualizado ✓' : 'Material agregado ✓', 'exito');
+}
+function editarMaterialCatalogo(codigo) {
+  const mat = estado.materiales.find(m => m.codigo === codigo); if (!mat) return;
+  document.getElementById('m-codigo').value = mat.codigo;
+  document.getElementById('m-descripcion').value = mat.descripcion;
+  abrirModal('modal-nuevo-material');
+}
+async function eliminarMaterialCatalogo(codigo) {
+  estado.materiales = estado.materiales.filter(m => m.codigo !== codigo);
+  await persistirConfig();
+  renderCatalogo(document.getElementById('cat-buscar').value);
+  mostrarToast('Material eliminado.', '');
+}
+function procesarCSV(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    let n = 0;
+    e.target.result.split('\n').forEach(linea => {
+      linea = linea.trim(); if (!linea) return;
+      const sep = linea.indexOf(','); if (sep < 1) return;
+      const codigo = linea.substring(0,sep).trim().toUpperCase();
+      const desc   = linea.substring(sep+1).trim().replace(/^"|"$/g,'');
+      if (!codigo || !desc) return;
+      const idx = estado.materiales.findIndex(m => m.codigo === codigo);
+      if (idx >= 0) estado.materiales[idx].descripcion = desc;
+      else estado.materiales.push({codigo, descripcion:desc});
+      n++;
+    });
+    await persistirConfig();
+    renderCatalogo();
+    mostrarToast(`${n} materiales importados ✓`, 'exito');
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+/* ══════════════════════════════════════════
+   CONFIGURACIÓN — LISTAS
+══════════════════════════════════════════ */
+function renderConfigListas() {
+  ['disenadores','solicitantes','motivos'].forEach(arr => {
+    const cont = document.getElementById('lista-' + arr); if (!cont) return;
+    cont.innerHTML = estado[arr].length
+      ? estado[arr].map((item,i) => `<div class="lista-config-item">
+          <span>${esc(item)}</span>
+          <button class="btn btn-peligro btn-xs" onclick="eliminarOpcion('${arr}',${i})">×</button>
+        </div>`).join('')
+      : '<div style="color:#bbb;font-size:12px;padding:4px 0;">Sin registros.</div>';
+  });
+}
+async function agregarOpcion(arr, inputId) {
+  const val = document.getElementById(inputId).value.trim();
+  if (!val) return;
+  if (estado[arr].includes(val)) { mostrarToast('Ya existe.', 'error'); return; }
+  estado[arr].push(val);
+  await persistirConfig();
+  renderConfigListas(); poblarSelectsFormulario();
+  document.getElementById(inputId).value = '';
+  mostrarToast('Opción agregada ✓', 'exito');
+}
+async function eliminarOpcion(arr, i) {
+  estado[arr].splice(i, 1);
+  await persistirConfig();
+  renderConfigListas(); poblarSelectsFormulario();
+}
+
+/* ══════════════════════════════════════════
+   LOGOS
+══════════════════════════════════════════ */
+function subirLogo(cual, event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    estado.logos[cual] = e.target.result;
+    await persistirConfig();
+    cargarLogosConfig();
+    mostrarToast('Logo guardado ✓', 'exito');
+  };
+  reader.readAsDataURL(file);
+}
+async function eliminarLogo(cual) {
+  estado.logos[cual] = null;
+  await persistirConfig();
+  cargarLogosConfig();
+}
+function cargarLogosConfig() {
+  ['foga','equi'].forEach(k => {
+    const el = document.getElementById(`prev-logo-${k}`); if (!el) return;
+    el.innerHTML = estado.logos[k]
+      ? `<img src="${estado.logos[k]}" alt="${k}">`
+      : '<span style="color:#aaa;font-size:12px;">Sin logo</span>';
+  });
+}
+
+/* ══════════════════════════════════════════
+   RESPONSABLES
+══════════════════════════════════════════ */
+function cargarResponsablesConfig() {
+  const r = estado.responsables;
+  const j = document.getElementById('cfg-jefe-planta');
+  const b = document.getElementById('cfg-bodega');
+  const o = document.getElementById('cfg-operador');
+  if (j) j.value = r.jefeDePlanta||'';
+  if (b) b.value = r.bodega||'';
+  if (o) o.value = r.operador||'';
+}
+async function guardarResponsables() {
+  estado.responsables.jefeDePlanta = document.getElementById('cfg-jefe-planta').value.trim() || 'JUAN PABLO LEÓN';
+  estado.responsables.bodega       = document.getElementById('cfg-bodega').value.trim()       || 'ARIEL SAGBAY';
+  estado.responsables.operador     = document.getElementById('cfg-operador').value.trim()     || 'JONATHAN UWJINT';
+  await persistirConfig();
+  mostrarToast('Responsables guardados ✓', 'exito');
+}
+
+/* ══════════════════════════════════════════
+   BORRAR TODO
+══════════════════════════════════════════ */
+function confirmarBorrarTodo() {
+  document.getElementById('modal-eliminar-texto').textContent =
+    '⚠️ ¿Borrar TODOS los datos? En modo Firebase esto borrará la base de datos de TODAS las computadoras. Esta acción NO se puede deshacer.';
+  document.getElementById('btn-confirmar-eliminar').onclick = async () => {
+    if (modoFirebase && db) {
+      mostrarToast('Borrando de Firebase...', '');
+      const snap = await db.collection('requerimientos').get();
+      const batch = db.batch();
+      snap.forEach(doc => batch.delete(doc.ref));
+      batch.delete(db.collection('config').doc('principal'));
+      await batch.commit();
+    }
+    localStorage.removeItem(CLAVE_LS);
+    cerrarModal('modal-eliminar');
+    location.reload();
+  };
+  abrirModal('modal-eliminar');
+}
+
+/* ══════════════════════════════════════════
+   UTILIDADES
+══════════════════════════════════════════ */
+function generarId() { return Date.now().toString(36) + Math.random().toString(36).substring(2,8); }
+function formatFecha(f) {
+  if (!f) return '—';
+  const p = String(f).split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : f;
+}
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function mostrarToast(msg, tipo) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'visible ' + (tipo||'');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.classList.remove('visible'), 3600);
+}
+function abrirModal(id)  { document.getElementById(id).classList.add('visible'); }
+function cerrarModal(id) { document.getElementById(id).classList.remove('visible'); }
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('visible'); });
+});
+</script>
+</body>
+</html>
